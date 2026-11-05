@@ -61,10 +61,13 @@ module.exports = async (req, res) => {
     // Wajib ada, kalau tidak event error bisa mematikan fungsi
     conn.on('error', e => { lastError = String((e && e.message) || e); });
     conn.on('chat', d => {
+      const u = d.user || {};
+      const text = String(d.comment || d.content || '').slice(0, 200);
+      if (!text) return;
       messages.push({
-        user: d.uniqueId || (d.user && d.user.uniqueId) || '',
-        nick: d.nickname || (d.user && d.user.nickname) || '',
-        text: String(d.comment || '').slice(0, 200),
+        user: d.uniqueId || u.uniqueId || u.displayId || '',
+        nick: d.nickname || u.nickname || '',
+        text,
       });
     });
 
