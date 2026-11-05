@@ -1,0 +1,5 @@
+{
+  "name": "tiktok-chat-roblox",
+  "version": "1.0.0",
+  "dependencies": { "tiktok-live-connector": "latest" }
+}
