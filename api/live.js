@@ -53,7 +53,7 @@ module.exports = async (req, res) => {
 
     let conn;
     try {
-      conn = new Conn(user);
+      conn = new Conn(user, { processInitialData: false });
     } catch (e) {
       return res.json({ ok: false, error: 'init gagal: ' + String((e && e.message) || e), messages: [] });
     }
