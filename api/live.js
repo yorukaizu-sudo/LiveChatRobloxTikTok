@@ -1,6 +1,3 @@
-// Long-poll: connect ke TikTok LIVE sebentar, kumpulkan chat, kembalikan sebagai JSON.
-// Semua error dikembalikan sebagai JSON {ok:false,error:"..."} supaya tidak jadi 500.
-
 let guarded = false;
 function guard() {
   if (guarded) return;
@@ -23,7 +20,6 @@ module.exports = async (req, res) => {
       return res.status(400).json({ ok: false, error: 'user kosong', messages: [] });
     }
 
-    // Muat library di dalam fungsi, supaya kalau gagal tetap bisa dilaporkan
     let mod;
     try {
       mod = await import('tiktok-live-connector');
@@ -47,8 +43,11 @@ module.exports = async (req, res) => {
       });
     }
 
+    const startedAt = Date.now();
+    const since = Number(req.query.since) || 0; // ts pesan terakhir yang sudah diterima client
     const waitMs = Math.min(Number(req.query.wait) || 12000, 20000);
     const messages = [];
+    const seenIds = new Set();
     let lastError = null;
 
     let conn;
@@ -58,13 +57,31 @@ module.exports = async (req, res) => {
       return res.json({ ok: false, error: 'init gagal: ' + String((e && e.message) || e), messages: [] });
     }
 
-    // Wajib ada, kalau tidak event error bisa mematikan fungsi
     conn.on('error', e => { lastError = String((e && e.message) || e); });
     conn.on('chat', d => {
       const u = d.user || {};
       const text = String(d.comment || d.content || '').slice(0, 200);
       if (!text) return;
+
+      // waktu pesan (ms)
+      let ts = Number(d.createTime || (d.common && d.common.createTime) || 0);
+      if (ts > 0 && ts < 1e11) ts *= 1000; // detik -> ms
+
+      // id unik pesan
+      const id = String(d.msgId || (d.common && d.common.msgId) || '');
+      if (id) {
+        if (seenIds.has(id)) return;
+        seenIds.add(id);
+      }
+
+      // buang pesan lama (riwayat yang ikut terkirim saat connect)
+      if (ts > 0) {
+        if (since > 0 ? ts <= since : ts < startedAt - 1000) return;
+      }
+
       messages.push({
+        id,
+        ts,
         user: d.uniqueId || u.uniqueId || u.displayId || '',
         nick: d.nickname || u.nickname || '',
         text,
