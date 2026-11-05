@@ -4,35 +4,46 @@ const Conn = lib.WebcastPushConnection || lib.TikTokLiveConnection;
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-
-  // Opsional: set API_KEY di Environment Variables Vercel
-  if (process.env.API_KEY && req.query.key !== process.env.API_KEY) {
-    return res.status(401).json({ ok: false, error: 'API key salah', messages: [] });
-  }
-
-  const user = String(req.query.user || '').replace('@', '').trim();
-  if (!user) return res.status(400).json({ ok: false, error: 'user kosong', messages: [] });
-
-  const waitMs = Math.min(Number(req.query.wait) || 12000, 20000);
-  const messages = [];
-  const conn = new Conn(user);
-
-  conn.on('chat', d => {
-    messages.push({
-      user: d.uniqueId || (d.user && d.user.uniqueId) || '',
-      nick: d.nickname || (d.user && d.user.nickname) || '',
-      text: String(d.comment || '').slice(0, 200),
-    });
-  });
-
   try {
-    await conn.connect();
+    if (process.env.API_KEY && req.query.key !== process.env.API_KEY) {
+      return res.status(401).json({ ok: false, error: 'API key salah', messages: [] });
+    }
+
+    const user = String(req.query.user || '').replace('@', '').trim();
+    if (!user) return res.status(400).json({ ok: false, error: 'user kosong', messages: [] });
+
+    const mod = await import('tiktok-live-connector');
+    const d0 = mod.default || {};
+    const Conn =
+      mod.WebcastPushConnection || mod.TikTokLiveConnection ||
+      d0.WebcastPushConnection || d0.TikTokLiveConnection;
+    if (!Conn) {
+      return res.json({ ok: false, error: 'class tidak ketemu: ' + Object.keys(mod).join(','), messages: [] });
+    }
+
+    const waitMs = Math.min(Number(req.query.wait) || 12000, 20000);
+    const messages = [];
+    const conn = new Conn(user);
+
+    conn.on('chat', d => {
+      messages.push({
+        user: d.uniqueId || (d.user && d.user.uniqueId) || '',
+        nick: d.nickname || (d.user && d.user.nickname) || '',
+        text: String(d.comment || '').slice(0, 200),
+      });
+    });
+
+    try {
+      await conn.connect();
+    } catch (e) {
+      return res.json({ ok: false, error: String((e && e.message) || e), messages: [] });
+    }
+
+    await new Promise(r => setTimeout(r, waitMs));
+    try { conn.disconnect(); } catch (_) {}
+
+    res.json({ ok: true, messages });
   } catch (e) {
-    return res.json({ ok: false, error: String((e && e.message) || e), messages: [] });
+    res.status(200).json({ ok: false, error: 'crash: ' + String((e && e.stack) || e).slice(0, 400), messages: [] });
   }
-
-  await new Promise(r => setTimeout(r, waitMs));
-  try { conn.disconnect(); } catch (_) {}
-
-  res.json({ ok: true, messages });
 };
