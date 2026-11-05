@@ -1,7 +1,6 @@
 // Long-poll: connect ke TikTok LIVE sebentar, kumpulkan chat, kembalikan.
 const lib = require('tiktok-live-connector');
 const Conn = lib.WebcastPushConnection || lib.TikTokLiveConnection;
-
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   try {
@@ -23,8 +22,10 @@ module.exports = async (req, res) => {
 
     const waitMs = Math.min(Number(req.query.wait) || 12000, 20000);
     const messages = [];
+    let lastError = null;
     const conn = new Conn(user);
 
+    conn.on('error', e => { lastError = String((e && e.message) || e); });
     conn.on('chat', d => {
       messages.push({
         user: d.uniqueId || (d.user && d.user.uniqueId) || '',
@@ -42,7 +43,7 @@ module.exports = async (req, res) => {
     await new Promise(r => setTimeout(r, waitMs));
     try { conn.disconnect(); } catch (_) {}
 
-    res.json({ ok: true, messages });
+    res.json({ ok: true, messages, warn: lastError });
   } catch (e) {
     res.status(200).json({ ok: false, error: 'crash: ' + String((e && e.stack) || e).slice(0, 400), messages: [] });
   }
